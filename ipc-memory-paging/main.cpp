@@ -2,6 +2,12 @@
 #include <list>
 #include <string>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include "Page.h"
 
 #define FRAME_SIZE 3
@@ -9,48 +15,63 @@
 using namespace std;
 
 list<Page> get_pages(string reference, const string& delimiter);
+void print_paging_frame(list<Page>& paging_frame);
 void subst_page_fifo(list<Page>& paging_frame, Page next_page, int frame_size);
 void subst_page_sca(list<Page>& paging_frame, Page next_page, int frame_size);
 
 int main() {
-    // system characteristics
-    string reference = "1,2,3,4,2,1,5,6,2,1,2,3,7,6,3,2,1,2,3,6,2,4,1,6,2,2,7,3,1,3,1,3,2,4,2,2,7,4,1,3";
-    string delimiter = ",";
-
     // paging queue
     list<Page> paging_frame_fifo;
     list<Page> paging_frame_sca;
 
-    // extract paging information from paging reference string
-    list<Page> pages = get_pages(reference, delimiter);
+    // pipe file descriptors
+    int piped_fifo[2];
+    int piped_sca[2];
+    pid_t pid;
+    int buf;
 
-    cout << "FIFO: " << endl;
-    // fifo algorithm
-    for (Page & page : pages) {
-        subst_page_fifo(paging_frame_fifo, page, FRAME_SIZE);
-
-        // print the result of the substitution
-        cout << "[ ";
-        for (Page & page_in_frame : paging_frame_fifo) {
-            cout << page_in_frame.page << " ";
-        }
-        cout << "]" << endl;
+    // creating the pipes from the descriptors
+    if (pipe(piped_fifo) == -1) {
+        fprintf(stderr, "FIFO pipe creation failed");
     }
-    cout << endl;
 
-    cout << "Second-chance Algorithm" << endl;
-    // second change algorithm
-    for (Page & page : pages) {
-        subst_page_sca(paging_frame_sca, page, FRAME_SIZE);
-
-        // print the result of the substitution
-        cout << "[ ";
-        for (Page & page_in_frame : paging_frame_sca) {
-            cout << page_in_frame.page << " (" << page_in_frame.ref_bit_up() << ") ";
-        }
-        cout << "]" << endl;
+    if ((pid = fork()) < 0) {
+        fprintf(stderr, "Process forking failed.");
     }
-    cout << endl;
+
+    if (pid == 0) {
+        // child process
+        cout << "Child process" << endl;
+
+        //sleep(2);
+        read(piped_fifo[0], &buf, sizeof(int));
+        cout << "Read Value: " << buf << endl;
+
+        _exit(EXIT_SUCCESS);
+    } else {
+        // parent process
+
+        // system characteristics
+        string reference = "1,2,3,4,2,1,5,6,2,1,2,3,7,6,3,2,1,2,3,6,2,4,1,6,2,2,7,3,1,3,1,3,2,4,2,2,7,4,1,3";
+        string delimiter = ",";
+
+        // extract paging information from paging reference string
+        list<Page> pages = get_pages(reference, delimiter);
+
+        for (Page & page : pages) {
+            cout << "Writing " << page.page << endl;
+            // write page number to pipe and close writing end
+            write(piped_fifo[1], &(page.page), sizeof(int));
+
+            // wait for child to terminate to send another page
+            wait(&pid);
+
+            // fork process again
+            if ((pid = fork()) < 0) {
+                fprintf(stderr, "Process forking failed.");
+            }
+        }
+    }
 }
 
 list<Page> get_pages(string reference, const string& delimiter) {
@@ -70,6 +91,14 @@ list<Page> get_pages(string reference, const string& delimiter) {
     pages.push_back(last_page);
 
     return pages;
+}
+
+void print_paging_frame(list<Page>& paging_frame) {
+    cout << "[ ";
+    for (Page & page_in_frame : paging_frame) {
+        cout << page_in_frame.page << " (" << page_in_frame.ref_bit_up() << ") ";
+    }
+    cout << "]" << endl;
 }
 
 void subst_page_fifo(list<Page>& paging_frame, const Page next_page, const int frame_size) {
