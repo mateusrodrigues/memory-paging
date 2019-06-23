@@ -1,14 +1,16 @@
 #include <iostream>
 #include <list>
-#include <queue>
 #include <string>
+
+#include "Page.h"
 
 #define FRAME_SIZE 3
 
 using namespace std;
 
-list<int> get_pages(string reference, const string& delimiter);
-void subst_page_fifo(list<int>& paging_frame, int next_page, int frame_size);
+list<Page> get_pages(string reference, const string& delimiter);
+void subst_page_fifo(list<Page>& paging_frame, Page next_page, int frame_size);
+void subst_page_sca(list<Page>& paging_frame, Page next_page, int frame_size);
 
 int main() {
     // system characteristics
@@ -16,24 +18,42 @@ int main() {
     string delimiter = ",";
 
     // paging queue
-    list<int> paging_frame;
+    list<Page> paging_frame;
 
     // extract paging information from paging reference string
-    list<int> pages = get_pages(reference, delimiter);
+    list<Page> pages = get_pages(reference, delimiter);
 
-    for (int & page : pages) {
+    cout << "FIFO: " << endl;
+    // fifo algorithm
+    for (Page & page : pages) {
         subst_page_fifo(paging_frame, page, FRAME_SIZE);
 
+        // print the result of the substitution
         cout << "[ ";
-        for (int & page_in_frame : paging_frame) {
-            cout << page_in_frame << " ";
+        for (Page & page_in_frame : paging_frame) {
+            cout << page_in_frame.page << " ";
         }
         cout << "]" << endl;
     }
+    cout << endl;
+
+    cout << "Second-chance Algorithm" << endl;
+    // second change algorithm
+    for (Page & page : pages) {
+        subst_page_sca(paging_frame, page, FRAME_SIZE);
+
+        // print the result of the substitution
+        cout << "[ ";
+        for (Page & page_in_frame : paging_frame) {
+            cout << page_in_frame.page << " (" << page_in_frame.ref_bit_up() << ") ";
+        }
+        cout << "]" << endl;
+    }
+    cout << endl;
 }
 
-list<int> get_pages(string reference, const string& delimiter) {
-    list<int> pages;
+list<Page> get_pages(string reference, const string& delimiter) {
+    list<Page> pages;
     char* pEnd;
 
     // memory pages iteration
@@ -41,25 +61,67 @@ list<int> get_pages(string reference, const string& delimiter) {
     string token;
     while ((pos = reference.find(delimiter)) != string::npos) {
         token = reference.substr(0, pos);
-        pages.push_back(strtol(token.c_str(), &pEnd, 10));
+        Page page(strtol(token.c_str(), &pEnd, 10));
+        pages.push_back(page);
         reference.erase(0, pos + delimiter.length());
     }
-    pages.push_back(strtol(reference.c_str(), &pEnd, 10));
+    Page last_page(strtol(reference.c_str(), &pEnd, 10));
+    pages.push_back(last_page);
 
     return pages;
 }
 
-void subst_page_fifo(list<int>& paging_frame, const int next_page, const int frame_size) {
-    // verify whether page already exists in page frame
-    bool needs_removal = true;
-    for (int & page : paging_frame) {
-        if (page == next_page)
-            needs_removal = false;
+void subst_page_fifo(list<Page>& paging_frame, const Page next_page, const int frame_size) {
+    // verify whether this is a page fault
+    bool page_fault = true;
+    for (Page & page : paging_frame) {
+        if (page.page == next_page.page)
+            page_fault = false;
     }
 
-    if (needs_removal) {
+    // if page fault, apply algorithm
+    if (page_fault) {
         if (paging_frame.size() == frame_size)
             paging_frame.pop_front();
-        paging_frame.push_back(next_page);
+        Page page(next_page);
+        paging_frame.push_back(page);
+    }
+}
+
+void subst_page_sca(list<Page>& paging_frame, const Page next_page, const int frame_size) {
+    // verify whether this is a page fault
+    // if it isn't, toggle reference bit of page to 1
+    bool page_fault = true;
+    for (Page & page : paging_frame) {
+        if (page.page == next_page.page) {
+            page_fault = false;
+            if (!page.ref_bit_up()) {
+                page.toggle_bit();
+            }
+            break;
+        }
+    }
+
+    // if page fault, apply algorithm
+    Page page(next_page);
+    if (page_fault) {
+        // add page-fault-causing page value
+        if (paging_frame.size() == frame_size) {
+            for (Page & current_page : paging_frame) {
+                if (!current_page.ref_bit_up()) {
+                    paging_frame.remove(current_page);
+                    break;
+                } else {
+                    current_page.toggle_bit();
+                }
+            }
+        }
+
+        // When all bits are referenced (1), it may happen that the push
+        // might overflow on the frame size. In this case, revert back to
+        // FIFO strategy.
+        if (paging_frame.size() == frame_size)
+            paging_frame.pop_front();
+        paging_frame.push_back(page);
     }
 }
