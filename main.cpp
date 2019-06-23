@@ -18,7 +18,8 @@ int main() {
     string delimiter = ",";
 
     // paging queue
-    list<Page> paging_frame;
+    list<Page> paging_frame_fifo;
+    list<Page> paging_frame_sca;
 
     // extract paging information from paging reference string
     list<Page> pages = get_pages(reference, delimiter);
@@ -26,11 +27,11 @@ int main() {
     cout << "FIFO: " << endl;
     // fifo algorithm
     for (Page & page : pages) {
-        subst_page_fifo(paging_frame, page, FRAME_SIZE);
+        subst_page_fifo(paging_frame_fifo, page, FRAME_SIZE);
 
         // print the result of the substitution
         cout << "[ ";
-        for (Page & page_in_frame : paging_frame) {
+        for (Page & page_in_frame : paging_frame_fifo) {
             cout << page_in_frame.page << " ";
         }
         cout << "]" << endl;
@@ -40,11 +41,11 @@ int main() {
     cout << "Second-chance Algorithm" << endl;
     // second change algorithm
     for (Page & page : pages) {
-        subst_page_sca(paging_frame, page, FRAME_SIZE);
+        subst_page_sca(paging_frame_sca, page, FRAME_SIZE);
 
         // print the result of the substitution
         cout << "[ ";
-        for (Page & page_in_frame : paging_frame) {
+        for (Page & page_in_frame : paging_frame_sca) {
             cout << page_in_frame.page << " (" << page_in_frame.ref_bit_up() << ") ";
         }
         cout << "]" << endl;
